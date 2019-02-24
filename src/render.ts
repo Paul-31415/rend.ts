@@ -1,7 +1,24 @@
 import * as PIXI from "pixi.js";
 import 'pixi-display';
+//import * as GPU from "gpu.js";
+
+/*
+
+optimizations:
+[ ] - gpujs
+[-] - caching:
+  [√] - rays
+  [√] - intersections
+  [ ] - other
+[ ] - colorer ray quantity
+[ ] - other...
+
+*/
+
+
 
 import { RGBColor, Color } from "./color";
+import { ucs2 } from "punycode";
 
 
 const EPSILON = 0.00000001;
@@ -514,7 +531,7 @@ class LambertianColorer implements Colorer {
             if (i2.colorer === undefined) {
                 return this.color;
             }
-            return this.color.plus(i2.colorer.getColor(s, i2, steps - 1));
+            return this.color.apply(i2.colorer.getColor(s, i2, steps - 1));
         }
     }
 }
@@ -534,7 +551,7 @@ class ReflectiveColorer implements Colorer {
             if (i2.colorer === undefined) {
                 return this.color;
             }
-            return this.color.plus(i2.colorer.getColor(s, i2, steps - 1));
+            return this.color.apply(i2.colorer.getColor(s, i2, steps - 1));
         }
     }
 }
@@ -550,6 +567,30 @@ class uvCheckerFlatColorer implements Colorer {
         } else { return this.color2; }
     }
 }
+function mod(x: number, m: number): number {
+    return ((x % m) + m) % m;
+}
+/*class uvFlatImageMap implements Colorer {
+    constructor(public image: PIXI.Texture,
+        public scaleU = 1,
+        public scaleV = 1,
+        public offsetU = 0,
+        public offsetV = 0,
+    ) { }
+    getColor(_s: Scene, i: Intersection, _steps: number): Color {
+        var c: number[] = (i.thing as ColoredTraceable).uvCoords(i);
+        mod(c[0] * this.scaleU + this.offsetU, this.image.width);
+        mod(c[1] * this.scaleV + this.offsetV, this.image.height);
+
+
+
+    }
+
+}*/
+
+
+
+
 
 class uvCheckerColorer implements Colorer {
     constructor(public colorer1: Colorer,
@@ -563,6 +604,57 @@ class uvCheckerColorer implements Colorer {
         } else { return this.colorer2.getColor(_s, i, _steps); }
     }
 }
+
+
+interface Texture {
+    getColorer(): Colorer
+}
+interface UVTexture extends Texture {
+    getUVColorer(u: number, v: number): Colorer
+}
+
+class MandelbrotTexture implements UVTexture {
+    static iters = 40;
+    getColorer(): Colorer {
+        return new FlatColorer(new RGBColor(0, 0, 0));
+    }
+
+    getUVColorer(u: number, v: number): Colorer {
+        var zr: number = u;
+        var zi: number = v;
+        var zrsq: number = u * u;
+        var zisq: number = v * v;
+        var i: number;
+        for (i = 0; zrsq + zisq < 4 && i < MandelbrotTexture.iters; i++) {
+            zi = zr * zi * 2 + v;
+            zr = zrsq - zisq + u;
+            zrsq = zr * zr;
+            zisq = zi * zi;
+        }
+        if (i < MandelbrotTexture.iters) {
+            return new LambertianColorer(new RGBColor((Math.sin(i) + 1) / 3, (Math.sin(i * (2 ** .5)) + 1) / 3, (Math.sin(i * (3 ** .5)) + 1) / 3));
+        } else {
+            return new ReflectiveColorer(new RGBColor(.9, .9, .9));
+        }
+    }
+}
+
+
+class uvColorer implements Colorer {
+    constructor(public texture: UVTexture,
+        public scaleU = 1,
+        public scaleV = 1,
+        public offsetU = 0,
+        public offsetV = 0,
+    ) { }
+    getColor(_s: Scene, i: Intersection, _steps: number): Color {
+        var c: number[] = (i.thing as ColoredTraceable).uvCoords(i);
+        return this.texture.getUVColorer(c[0] * this.scaleU + this.offsetU, c[1] * this.scaleV + this.offsetV).getColor(_s, i, _steps);
+    }
+
+}
+
+
 
 class ColorerAverage implements Colorer {
     constructor(public colorer1: Colorer, public w1: number,
@@ -622,8 +714,8 @@ function traceOrtho(scene: Scene, start: Ray, ix: V3D, iy: V3D, dx: number, dy: 
     return result;
 }
 
-function tracePersp(scene: Scene, start: Ray, ix: V3D, iy: V3D, dx: number, dy: number, steps: number = 10, samples: number = 1000): PIXI.Graphics {
-    var result: PIXI.Graphics = new PIXI.Graphics();
+function tracePersp(scene: Scene, start: Ray, ix: V3D, iy: V3D, dx: number, dy: number, steps: number = 10, samples: number = 1000): ColorImage {
+    var result: ColorImage = new ColorImage(Math.ceil(1 / dx), Math.ceil(1 / dy));
     var dix: V3D = ix.times(dx);
     var diy: V3D = iy.times(dy);
 
@@ -633,13 +725,12 @@ function tracePersp(scene: Scene, start: Ray, ix: V3D, iy: V3D, dx: number, dy: 
     var y: number = 0;
     for (var fy = 0; fy < 1; fy += dy) {
         var R: Ray = new Ray(r.pos, r.dir);
-        result.moveTo(0, y);
         var x: number = 0;
         for (var fx = 0; fx < 1; fx += dx) {
             var i: Intersection = scene.intersection(R);
 
 
-            var color: number = ((x + y) & 1) ? 0x808080 : 0xff00ff;
+            var color: Color = ((x + y) & 1) ? new RGBColor(.5, .5, .5) : new RGBColor(1, 0, 1);
 
 
             if (i.colorer != undefined) {
@@ -647,16 +738,11 @@ function tracePersp(scene: Scene, start: Ray, ix: V3D, iy: V3D, dx: number, dy: 
                 for (var s = 1; s < samples; s++) {
                     c = c.plus(i.colorer.getColor(scene, i, steps));
                 }
-                color = c.scale(1. / samples).getRGB();
+                color = c;
 
             }
 
-            result.lineStyle(1, color, 1, 1);
-            if (i.intersects) {
-                result.lineTo(x, y);
-            } else {
-                result.moveTo(x, y);
-            }
+            result.colors[x][y] = new SampledColor(color.scale(1 / samples), samples, R);
 
             R.dir = R.dir.plus(dix);
             x++;
@@ -667,27 +753,126 @@ function tracePersp(scene: Scene, start: Ray, ix: V3D, iy: V3D, dx: number, dy: 
     return result;
 }
 
+function traceRefine(scene: Scene, image: ColorImage, steps: number = 10, sampleFactor: number = 10) {
+    for (var y = 0; y < image.height; y++) {
+        for (var x = 0; x < image.width; x++) {
+            var i: Intersection = scene.intersection(image.colors[x][y].r);
+
+
+            var color: Color = ((x + y) & 1) ? new RGBColor(.5, .5, .5) : new RGBColor(1, 0, 1);
+
+
+            if (i.colorer != undefined) {
+                var samples: number = 1;
+                var c: Color = i.colorer.getColor(scene, i, steps);
+                for (var s = 1; s < sampleFactor; s += 1 + 0 * image.colors[x][y].c.brightness()) {
+                    c = c.plus(i.colorer.getColor(scene, i, steps));
+                    samples++;
+                }
+                color = c;
+                image.colors[x][y].addColor(color, samples);
+            }
 
 
 
-var colr1: Colorer = new LambertianColorer(new RGBColor(1, 0, 0));
+
+        }
+    }
+}
+/*
+var gpu = new GPU.GPU();
+function traceRefineKernal(s: Scene, I: ColorImage, steps = 10) {
+    var i: Intersection = s.intersection(I.colors[this.thread.x][this.thread.y].r);
+    if (i.colorer != undefined) {
+        I.colors[this.thread.x][this.thread.y].addColor(i.colorer.getColor(s, i, steps), 1);
+    }
+}
+const traceRefineGPU = gpu.createKernel(traceRefineKernal);
+*/
+
+
+var colr1: Colorer = new FlatColorer(new RGBColor(30, 25, 20));
 var colr2: Colorer = new FlatColorer(new RGBColor(0, 0.5, 200));
 var colr3: Colorer = new ColorerAverage(new ReflectiveColorer(new RGBColor(0, 0.1, 0)), 0.9, new LambertianColorer(new RGBColor(0, 0, 1)));
 
 
-var ground: Plane = new Plane(new uvCheckerColorer(new ColorerAverage(new ReflectiveColorer(new RGBColor(0.1, 0.1, 0.1)), 0.9, new LambertianColorer(new RGBColor(0.1, 0.1, .1))), new ColorerAverage(new ReflectiveColorer(new RGBColor(0.8, 0.8, 0.8)), 0.9, new LambertianColorer(new RGBColor(0.8, 0.8, .8))), 1, 1), new V3D(0, 2, 0), new V3D(1, 0, 1), new V3D(-1, 0, 1));
+var light: Sphere = new Sphere(colr1, new V3D(20, -20, 20), 6);
+var ground: Plane = new Plane(/*new uvCheckerColorer(new ColorerAverage(new ReflectiveColorer(new RGBColor(0.1, 0.1, 0.1)), 0.9, new LambertianColorer(new RGBColor(0.1, 0.1, .1))), new ColorerAverage(new ReflectiveColorer(new RGBColor(0.8, 0.8, 0.8)), 0.9, new LambertianColorer(new RGBColor(0.8, 0.8, .8))), 1, 1)*/ new uvColorer(new MandelbrotTexture(), 0.1, 0.1, -.4, -.6), new V3D(0, 2, 0), new V3D(1, 0, 1), new V3D(-1, 0, 1));
 var sphere1: Sphere = new Sphere(colr3, new V3D(0, 0, 0), 0.5);
-var sphere2: Sphere = new Sphere(colr3, new V3D(0, 1, 0), 0.4);
-var triangle1: Triangle = new Triangle(colr2, new V3D(0, 0, -1), new V3D(-1, -1, -1), new V3D(-1, 0, 0));
-var triangle2: Triangle = new Triangle(new FlatColorer(new RGBColor(1, 0, 0)), new V3D(-20, -20, 100), new V3D(-110, -13, 120), new V3D(-133, 30, 30));
+var sphere2: Sphere = new Sphere(colr3, new V3D(0, 1.2, 4), 2);
+var triangle1: Triangle = new Triangle(colr2, new V3D(0, 0, 4), new V3D(-1, -1, -1), new V3D(-1, 0, 0));
+var triangle2: Triangle = new Triangle(new FlatColorer(new RGBColor(100, 0.5, 0)), new V3D(-20, -20, 100), new V3D(-110, -13, 120), new V3D(-133, 30, 30));
 
-var exampleScene: Scene = new ArrayScene([sphere1, triangle1, triangle2, sphere2, ground], new uvCheckerFlatColorer(new RGBColor(0.125, 0.125, 0.125), new RGBColor(0, 0, 0), 10, 10), true);
+var exampleScene: Scene = new ArrayScene([sphere1, triangle1, triangle2, sphere2, ground, light], new uvCheckerFlatColorer(new RGBColor(0.125, 0.125, 0.125), new RGBColor(0, 0, 0), 10, 10), true);
+
+for (var y = 2; y > -5; y -= 0.1) {
+    (exampleScene as ArrayScene).contents = (exampleScene as ArrayScene).contents.concat([
+        new Triangle(colr3, new V3D(2, y, 2), new V3D(1, 0.1, 0), new V3D(0, 0.1, 1))]
+    );
+}
+
+
+
+
+
+
+class SampledColor {
+    public r: Ray;
+    constructor(public c: Color, public s: number, r: Ray) {
+        this.r = new Ray(new V3D(r.pos.x, r.pos.y, r.pos.z), new V3D(r.dir.x, r.dir.y, r.dir.z));
+    }
+    public addColor(c: Color, s: number) {
+        this.c = this.c.scale(this.s).plus(c).scale(1 / (this.s + s));
+        this.s += s;
+    }
+    public add(c: SampledColor) {
+        this.c = this.c.scale(this.s).plus(c.c.scale(c.s)).scale(1 / (this.s + c.s));
+        this.s += c.s;
+    }
+}
+
+
+class ColorImage {
+    public colors: SampledColor[][];
+
+    constructor(public width: number, public height: number) {
+        this.colors = new Array(width)
+        for (var i = 0; i < width; i++) {
+            this.colors[i] = new Array(height);
+        }
+
+    }
+
+    public add(o: ColorImage) {
+        for (var y = 0; y < this.height; y++) {
+            for (var x = 0; x < this.width; x++) {
+                this.colors[x][y].add(o.colors[x][y]);
+            }
+        }
+
+    }
+
+
+    public get(scale: number): PIXI.Graphics {
+        var result: PIXI.Graphics = new PIXI.Graphics();
+        for (var y = 0; y < this.height; y++) {
+            result.moveTo(0, y * scale);
+            for (var x = 0; x < this.width; x++) {
+                result.lineStyle(scale, this.colors[x][y].c.getRGB(),
+                    this.colors[x][y].c.getAlpha(), 1);
+                result.lineTo(x * scale, y * scale);
+            }
+        }
+        return result;
+    }
+}
+
 
 
 
 export {
-    Ray, V3D,
-    traceOrtho, tracePersp,
+    Ray, V3D, ColorImage,
+    traceOrtho, tracePersp, traceRefine,
 
     Traceable,
     Intersection,
@@ -695,8 +880,10 @@ export {
 
     Triangle, Parallelogram, Plane, Sphere,
 
+    Texture, UVTexture,
+
     Colorer,
-    NoColorer, FlatColorer, LambertianColorer, ReflectiveColorer,
+    NoColorer, FlatColorer, LambertianColorer, ReflectiveColorer, uvColorer,
 
     exampleScene
 }

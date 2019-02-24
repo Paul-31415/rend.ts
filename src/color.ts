@@ -10,7 +10,9 @@ abstract class Color {
     abstract getAlpha(): number;
     abstract scale(n: number): Color;
     abstract plus(c: Color): Color;
+    abstract apply(c: Color): Color; // for light of c falling on this
     abstract times(c: Color): Color;
+    abstract brightness(): number;
 }
 function bound(n: number, l: number, h: number): number {
     return Math.max(l, Math.min(h, n));
@@ -50,14 +52,25 @@ class RGBColor extends Color {
         var cc = RGBColor.convert(c);
         return new RGBColor(this.r + cc.r, this.g + cc.g, this.b + cc.b);
     }
+    public apply(c: Color): Color {
+        var cc = RGBColor.convert(c);
+        return new RGBColor(this.r * cc.r, this.g * cc.g, this.b * cc.b);
+    }
     public times(c: Color): Color {
         var cc = RGBColor.convert(c);
         return new RGBColor(this.r * cc.r, this.g * cc.g, this.b * cc.b);
     }
+    public brightness(): number {
+        return this.r + this.g + this.b;
+    }
 }
+
+
 
 
 
 export {
     RGBColor, Color
 }
+
+
