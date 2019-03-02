@@ -1,5 +1,5 @@
 import * as PIXI from "pixi.js";
-
+//import * as q from "quaternion.js";
 
 
 interface Angle {
@@ -97,20 +97,20 @@ class QuaternionAngle {
         return (o as QuaternionAngle).times(this);
     }
     plusV(v: number[], dt: number): Angle {
-        const mag = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) * dt;
-        if (mag < 0.000000001) {
+        const mag = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+        if (mag === 0) {
             return this;
         }
-        const f = Math.sin(mag / 2) / mag;
-        return this.plus(new QuaternionAngle(Math.cos(mag / 2), v[0] * f, v[1] * f, v[2] * f));
+        const f = Math.sin(mag * dt / 2) / mag;
+        return this.plus(new QuaternionAngle(Math.cos(mag * dt / 2), v[0] * f, v[1] * f, v[2] * f));
         //return this.add(new QuaternionAngle(0, v[0] * dt / 2, v[1] * dt / 2, v[2] * dt / 2).times(this)).normalized();
     }
 
-    inverse(): Angle {
+    mulinverse(): QuaternionAngle {
         const mag2 = this.r * this.r + this.i * this.i + this.j * this.j + this.k * this.k;
         return new QuaternionAngle(this.r / mag2, -this.i / mag2, -this.j / mag2, -this.k / mag2);
     }
-    conjugate(): QuaternionAngle {
+    inverse(): Angle {
         return new QuaternionAngle(this.r, -this.i, -this.j, -this.k);
     }
     apply(x = 0, y = 0, z = 0): number[] {
@@ -119,7 +119,7 @@ class QuaternionAngle {
 
     }
     minus(o: Angle): Angle {
-        return this.plus((o as QuaternionAngle).conjugate());
+        return o.inverse().plus(this);
     }
     scale(n = 1): Angle { //to be used only for angular vel
         return new QuaternionAngle(this.r * n, this.i * n, this.j * n, this.k * n);
@@ -148,10 +148,10 @@ class QuaternionAngle {
         if (s < 0.00000000001) {
             return [0, 0, 0];
         }
-        /*if (Math.abs(theta) > Math.PI) {
-            const f = (theta + (theta > 0 ? -2 : 2) * Math.PI) / theta;
+        if (Math.abs(theta) > Math.PI) {
+            const f = (theta + (theta > 0 ? -2 : 2) * Math.PI);
             return [f * this.i / s, f * this.j / s, f * this.k / s];
-        }*/
+        }
         return [theta * this.i / s, theta * this.j / s, theta * this.k / s];
     }
 
@@ -461,7 +461,7 @@ class Impulse {
     shift(x = 0, y = 0, z = 0): Impulse {//calculates the equivilent impulse for if this happens at x,y,z from the origin
         // only changes torque
         const it = cross(x, y, z, this.ix, this.iy, this.iz); // torque
-        return new Impulse(this.ix, this.iy, this.iz, it[0] + this.iax, it[1] + this.iay, it[2] + this.iaz);
+        return new Impulse(this.ix, this.iy, this.iz, -it[0] + this.iax, -it[1] + this.iay, -it[2] + this.iaz);
     }
     scale(n = 1): Impulse {
         return new Impulse(this.ix * n, this.iy * n, this.iz * n, this.iax * n, this.iay * n, this.iaz * n);
@@ -483,9 +483,9 @@ function internalImpulse(p1: PPoint3d, p2: PPoint3d, i: Impulse) {
 
     //i is an impulse from p1 to p2
     //first, add the intended impulse to p2
-    p2.p.addImpulse(i);
+    p2.p.addImpulse(i.shift(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z));
     //then add the shifted impulse to p1;
-    p1.p.addImpulse(i.negative().shift(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z));
+    p1.p.addImpulse(i.negative());
 }
 
 
@@ -516,44 +516,111 @@ class FAngleLinkage implements Force {
 
         // just find which way to push it
         const rp = ra1.apply(1, 0, 0);
-        const tp = cross(dx / r, dy / r, dz / r, rp[0], rp[1], rp[2]);
+        const ts = cross(dx / r, dy / r, dz / r, rp[0], rp[1], rp[2]);
+        const k = this.stiffness * dt;
 
-        const ta = (ra2.minus(ra1) as QuaternionAngle).axisAngle();
 
-        const ts = [tp[0] + ta[0], tp[1] + ta[1], tp[2] + ta[2]];
+        //damping
+        //
+
+        const dvx = ((p.p as PVel).vx - (this.link.p as PVel).vx);
+        const dvy = ((p.p as PVel).vy - (this.link.p as PVel).vy);
+        const dvz = ((p.p as PVel).vz - (this.link.p as PVel).vz);
+
+        const w = cross(dx / r2, dy / r2, dz / r2, dvx, dvy, dvz);
+        const td = [p.p.va[0] - w[0], p.p.va[1] - w[1], p.p.va[2] - w[2]];
+
+        const K = this.dampening * dt;
+
+
+        //point correct
+        //const dr = (ra1.minus(ra2) as QuaternionAngle).axisAngle();
+        //const T = [dr[0] * this.dampening2 * dt, dr[1] * this.dampening2 * dt, dr[2] * this.dampening2 * dt];
+
+
+        const t = [ts[0] * k + td[0] * K, ts[1] * k + td[1] * K, ts[2] * k + td[2] * K]
+        const f = cross(t[0], t[1], t[2], dx / r2, dy / r2, dz / r2);
+        //t = rxf
+        const et = cross(dx, dy, dz, f[0], f[1], f[2]);
+
+        const I = new Impulse(f[0], f[1], f[2], (t[0] - et[0]), (t[1] - et[1]), (t[2] - et[2]));
+
+
+
+        internalImpulse(this.link, p, I);
+
+        //const ta = (ra2.minus(ra1) as QuaternionAngle).axisAngle();
+
+        //const tad = [this.link.p.va[0] - p.p.va[0], this.link.p.va[1] - p.p.va[1], this.link.p.va[2] - p.p.va[2]];
+        //const IResR = new Impulse(0, 0, 0, tad[0] * this.dampening2 * dt, tad[1] * this.dampening2 * dt, tad[2] * this.dampening2 * dt);
 
 
         //damping: attempt to match our angular velocity to link's
         // w = v/r 
         // v = rw
 
-        const dvx = ((p.p as PVel).vx - (this.link.p as PVel).vx);
-        const dvy = ((p.p as PVel).vy - (this.link.p as PVel).vy);
-        const dvz = ((p.p as PVel).vz - (this.link.p as PVel).vz);
-        const va = cross(dvx, dvy, dvz, dx / r2, dy / r2, dz / r2);
 
-        const td = [this.link.p.va[0] - va[0], this.link.p.va[1] - va[1], this.link.p.va[2] - va[2]]
+        //const va = cross(dvx, dvy, dvz, dx / r2, dy / r2, dz / r2);
 
-        const K = this.dampening * dt;
+        //const td = [this.link.p.va[0] - va[0], this.link.p.va[1] - va[1], this.link.p.va[2] - va[2]];
 
-        const k = -this.stiffness * dt;
 
-        const t = [ts[0] * k + td[0] * K, ts[1] * k + td[1] * K, ts[2] * k + td[2] * K];
+        //const K = this.dampening * dt;
 
-        const f = cross(t[0], t[1], t[2], dx / r2, dy / r2, dz / r2);
-        //t = rxf
-        const et = cross(dx, dy, dz, f[0], f[1], f[2]);
+        //const k = -this.stiffness * dt;
+
+        //const t = [ts[0] * k + td[0] * K, ts[1] * k + td[1] * K, ts[2] * k + td[2] * K];
 
 
 
-        const IRes = new Impulse(f[0], f[1], f[2], t[0] - et[0], t[1] - et[1], t[2] - et[2]);
 
 
-        internalImpulse(p, this.link, IRes);
+        //const IRes = new Impulse(f[0], f[1], f[2], t[0] - et[0] + ta[0] * dt * this.stiffness, t[1] - et[1] + ta[1] * dt * this.stiffness, t[2] - et[2] + ta[2] * dt * this.stiffness);
+
+
+        //internalImpulse(p, this.link, IRes);
+        //internalImpulse(this.link, p, IResR);
 
     }
-    constructor(public link: PPoint3d, public a1: Angle = defaultAngle, public a2: Angle = defaultAngle, public stiffness = 1, public dampening = 0) { }
+    constructor(public link: PPoint3d, public a1: Angle = defaultAngle, public a2: Angle = defaultAngle, public stiffness = 1, public dampening = 0, public dampening2 = 0) { }
 }
+
+class FStiffLinkage implements Force {
+    doForce(p: PPoint3d, dt: number): void {
+
+        const rp = this.link.a.apply(this.len[0], this.len[1], this.len[2]);
+        const dx = this.link.x + rp[0] - p.x;
+        const dy = this.link.y + rp[1] - p.y;
+        const dz = this.link.z + rp[2] - p.z;
+        const f = -dt * this.stiffness;
+
+        //dampening:
+        //find velocity of the attraction point
+        //wxr
+        const av = cross(this.link.p.va[0], this.link.p.va[1], this.link.p.va[2], dx, dy, dz);
+        const vx = this.link.p.vx + av[0] * this.dampening2 - p.p.vx;
+        const vy = this.link.p.vy + av[1] * this.dampening2 - p.p.vy;
+        const vz = this.link.p.vz + av[2] * this.dampening2 - p.p.vz;
+
+        const f2 = dt * this.dampening;
+
+        // angular torque
+        const r = (this.link.a.plus(this.angle).minus(p.a) as QuaternionAngle).axisAngle();
+        const va = [this.link.p.va[0] - p.p.va[0], this.link.p.va[1] - p.p.va[1], this.link.p.va[2] - p.p.va[2]];
+
+
+        const I = new Impulse(f * dx - vx * f2, f * dy - vy * f2, f * dz - vz * f2);
+        const I2 = new Impulse(0, 0, 0, this.angleStiffness * dt * r[0] - this.angleDampening * dt * va[0], this.angleStiffness * dt * r[1] - this.angleDampening * dt * va[1], this.angleStiffness * dt * r[2] - this.angleDampening * dt * va[2]);
+
+        internalImpulse(p, this.link, I);
+        internalImpulse(this.link, p, I2);
+
+
+
+    }
+    constructor(public link: PPoint3d, public len = [1, 0, 0], public angle = new QuaternionAngle(), public stiffness = 1, public angleStiffness = 1, public dampening = 0, public dampening2 = 0, public angleDampening = 0) { }
+}
+
 
 
 
@@ -657,19 +724,21 @@ function stiffRopeNoAngle(links: number, len = 1, slen = 1, s = 1, d = 1, stiff 
     }
     return points;
 }
-function stiffRope(links: number, len = 1, s = 1, d = 1, stiff = 1, stiffd = 1): PPoint3d[] {
+function stiffRope(links: number, len = [1, 0, 0], s = 1, s2 = 1, d = 1, d2 = 1, d3 = 1): PPoint3d[] {
     var points = [new PPoint3d(0, 0, 0, new noPhysics())];
     for (var i = 1; i < links; i++) {
-        points.push(new PPoint3d(i * len, 0, 0, new GravityDecorator(0, g, 0, new PNeut(0, 0, 0, 1, [new FLinkage(points[points.length - 1], len, s, d), new FAngleLinkage(points[points.length - 1], defaultAngle, defaultAngle, stiff, stiffd)]))));
+        points.push(new PPoint3d(i * len[0], i * len[1], i * len[2], new GravityDecorator(0, g, 0, new PNeut(0, 0, 0, 1, [new FStiffLinkage(points[points.length - 1], len, new QuaternionAngle(), s, s2, d, d2, d3)]))));
         if (i > 1) {
-            ((points[points.length - 2].p as GravityDecorator).p as PNeut).f.push(new FAngleLinkage(points[points.length - 1], defaultAngle, defaultAngle, stiff, stiffd))
+            //((points[points.length - 2].p as GravityDecorator).p as PNeut).f.push(new FStiffLinkage(points[points.length - 1], [-len[0], -len[1], -len[2]], new QuaternionAngle(), s, 0, d, d2, 0));
         }
     }
     return points;
 }
 
+debugger;
 export {
     Physics, noPhysics, Angle, QuaternionAngle,
     rope, PVel, PNeut, PLinkage, GravityDecorator, //CombinePhysics,
-    TriBridge, Tube, FLinkage, stiffRope, Impulse, Hinge,
+    TriBridge, Tube, FLinkage, stiffRope, Impulse, Hinge, FAngleLinkage, FStiffLinkage
 }
+
