@@ -267,6 +267,12 @@ class PPoint3d extends PIXI.Point {
     }
 }
 
+
+
+
+
+
+
 interface Physics {
     update(p: PPoint3d, dt: number): void;
     addImpulse(i: Impulse): void;
@@ -652,7 +658,7 @@ class CombinePhysics implements Physics {
 }
 */
 
-const g = 0;
+const g = 0.1;
 function Tube(circ: number, links: number, len = 1, s = 1, d = 1, sc = 1, dc = 1, sups = 0, supd = 1, ): PPoint3d[] {
     var points: PPoint3d[] = [];
     const r = len / (2 * Math.sin(Math.PI / circ));
@@ -735,7 +741,7 @@ function stiffRope(links: number, len = [1, 0, 0], s = 1, s2 = 1, d = 1, d2 = 1,
     return points;
 }
 
-debugger;
+//debugger;
 export {
     Physics, noPhysics, Angle, QuaternionAngle,
     rope, PVel, PNeut, PLinkage, GravityDecorator, //CombinePhysics,

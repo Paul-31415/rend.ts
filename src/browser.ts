@@ -1,7 +1,11 @@
 import * as PIXI from "pixi.js";
+
+
+
 import 'pixi-display';
 import { traceOrtho, exampleScene, Ray, V3D, tracePersp, ColorImage, traceRefine } from "./render";
 import { rope, PVel, PNeut, PLinkage, GravityDecorator, TriBridge, Tube, FLinkage, stiffRope, Angle, QuaternionAngle, FAngleLinkage, FStiffLinkage } from "./PixelArt";
+import { test } from "mocha";
 //import { io } from 'socket.io-client';
 
 
@@ -86,7 +90,7 @@ const tubeC = 6;
 const tubeL = 10;
 
 //var rope1 = Tube(tubeC, 60, tubeL, 10, 1, 1000, 1, 100);
-var rope1 = stiffRope(10, [10, 0, 0], 3, 100, 1, -1, -100);
+var rope1 = stiffRope(64, [5, 0, 0], 20, 200, 1, -1, -200);
 
 const r = rope1[0].a.plusV([1, 1, 1], 1);
 
@@ -98,16 +102,16 @@ const r = rope1[0].a.plusV([1, 1, 1], 1);
 //console.log(new QuaternionAngle(.5, .5, .5, .5).axisAngle()); 
 //console.log(new QuaternionAngle(1,  0, 1, 0).times(new QuaternionAngle(1, 0.5, .5, 0.75)));
 
-rope1[0].p = new PNeut(0, 0, 0, 1, [new FStiffLinkage(rope1[1], [-10, 0, 0], new QuaternionAngle(), (((rope1[1].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).stiffness
-    , 100,
+/*rope1[0].p = new PNeut(0, 0, 0, 1, [new FStiffLinkage(rope1[1], [-10, 0, 0], new QuaternionAngle(), (((rope1[1].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).stiffness
+    , 10,
     (((rope1[1].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).dampening,
-    (((rope1[1].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).dampening2, -100)], [0, 0, 0], 100);
+    (((rope1[1].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).dampening2, -100)], [0, 0, 0], 100);*/
 
 //rope1 = rope1.reverse();
 //rope1.pop();
 //rope1 = rope1.reverse();
 
-//rope1[rope1.length - 1].p.vy = 1;
+rope1[rope1.length - 1].p.vz = .1;
 
 
 //rope1[0].a = new QuaternionAngle().plusV([0, 1, 1], 3);
@@ -123,7 +127,8 @@ for (var i = 1; i < rope1.length; i++) {
     //(rope1[i].p as PNeut).mass = 500 - i;
     //rope1[i].x = 0;//i % 2;
     //rope1[i].y = i;//i % 2;
-    ((rope1[i].p as GravityDecorator).p as PNeut).I = 100;
+    ((rope1[i].p as GravityDecorator).p as PNeut).I = 25 / 4;
+    ((rope1[i].p as GravityDecorator).p as PNeut).mass = 1 / 4;
 	/*if (i > 0) {
                 (rope1[i].p as GravityDecorator).gy = Math.sin((i / 50) + t * t * 0.01);
                 (rope1[i].p as GravityDecorator).gx = Math.cos((i / 50) + t * t * 0.01);
@@ -141,13 +146,14 @@ Rscene.addChild(exampleText);
 
 app.stage.addChild(Rscene);
 
-const dscale = 0.1;
+const dscale = 0.01;
 
 var renderer = PIXI.autoDetectRenderer(800, 800);
 
-var t = 0;
+var t = -10;
 
-const ovc = 1;
+
+const ovc = 20;
 
 
 function point(rx = 0, ry = 0, rz = 0) {
@@ -173,51 +179,62 @@ function point(rx = 0, ry = 0, rz = 0) {
 }
 
 const alen = 10;
+var unsimulatedTime = 0;
 
 
-function update(delta: number) {
-    Rscene.clear();
-    //rope1[0].y = mousePosition[1];
 
-
-    Rscene.moveTo(0, 0);
-    for (var j = 0; j < ovc; j++) {
-        //((rope1[400].p as GravityDecorator).p as PLinkage).l += 0.001;
-
-        t += delta / ovc;
-        for (var i = 0; i < rope1.length; i++) {
-            //(((rope1[i].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).angle = new QuaternionAngle().plusV([0.000001, 0, 0], dscale * t) as QuaternionAngle;
-        }
-
-
-        //rope1[0].a = r;
-        rope1[0].p.va = [Math.cos(t / 160) / 10, 0, Math.sin(t / 160) / 10];
-        //rope1[0].p.va[0] += Math.cos(t / 160) / 400;
-        //rope1[0].p.va[1] += Math.sin(t / 160) / 400;
-        rope1[0].x = 0;
-        rope1[0].y = 0;
-        rope1[0].z = 0;
-        rope1[0].p.vx = 0;
-        rope1[0].p.vy = 0;
-        rope1[0].p.vz = 0;
-
-        /*for (var i = tubeC; i < rope1.length; i++) {
-            for (var n = 0; n < ((rope1[i].p as GravityDecorator).p as PNeut).f.length; n++) {
-                (((rope1[i].p as GravityDecorator).p as PNeut).f[n] as FLinkage).l *= 1 - delta / ovc * (i / rope1.length * i / rope1.length * i / rope1.length / 1000);
-            }
-        }*/
-        //(rope1[499].p as GravityDecorator).gx += Math.random() - .5;
-        //(rope1[499].p as GravityDecorator).gy += Math.random() - .5;//(rope1[499].p as PVel).vy;
-        //point(t / 14, t / 51, t / 40)
-
-        for (var i = 0; i < rope1.length; i++) {
-            rope1[i].update(dscale * delta);
-
-        }
-        for (var i = rope1.length; i > 0; i--) {
-            rope1[i - 1].update(dscale * delta);
+function doSimStep(): number {
+    //for (var j = 0; j < ovc; j++) {
+    //((rope1[400].p as GravityDecorator).p as PLinkage).l += 0.001;
+    const delta = 1;
+    t += delta / ovc;
+    /*if (t > 125 && t < 9000) {
+        for (var i = 1; i < rope1.length; i++) {
+            (((rope1[i].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).angle = (((rope1[i].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).angle.plusV([0, 0, (t % 100 > 50) ? .1 : -.1], dscale * delta / ovc) as QuaternionAngle;
         }
     }
+    if (t > 10000) {
+        for (var i = 1; i < rope1.length; i++) {
+            //(((rope1[i].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).angle = (((rope1[i].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).angle.plusV([0, 0.001, 0], dscale * delta / ovc) as QuaternionAngle;
+        }
+    }*/
+
+
+
+
+
+    rope1[0].a = new QuaternionAngle();
+    rope1[0].p.va = [0, 0, 0];
+    //rope1[0].p.va = [Math.cos(t / 160) / 10, 0, Math.sin(t / 160) / 10];
+    //rope1[0].p.va[0] += Math.cos(t / 160) / 400;
+    //rope1[0].p.va[1] += Math.sin(t / 160) / 400;
+
+    rope1[0].x = 0;
+    rope1[0].y = 0;
+    rope1[0].z = 0;
+    rope1[0].p.vx = 0;
+    rope1[0].p.vy = 0;
+    rope1[0].p.vz = 0;
+
+    /*for (var i = tubeC; i < rope1.length; i++) {
+        for (var n = 0; n < ((rope1[i].p as GravityDecorator).p as PNeut).f.length; n++) {
+            (((rope1[i].p as GravityDecorator).p as PNeut).f[n] as FLinkage).l *= 1 - delta / ovc * (i / rope1.length * i / rope1.length * i / rope1.length / 1000);
+        }
+    }*/
+    //(rope1[499].p as GravityDecorator).gx += Math.random() - .5;
+    //(rope1[499].p as GravityDecorator).gy += Math.random() - .5;//(rope1[499].p as PVel).vy;
+    //point(t / 14, t / 51, t / 40)
+
+    for (var i = 0; i < rope1.length; i++) {
+        rope1[i].update(dscale * delta / ovc);
+
+    }
+    for (var i = rope1.length; i > 0; i--) {
+        rope1[i - 1].update(dscale * delta / ovc);
+    }
+    return delta / ovc;
+}
+function render(): void {
     Rscene.moveTo(rope1[0].x, rope1[0].y);
     for (var i = 0; i < rope1.length; i++) {
         const vs = 10;
@@ -225,7 +242,7 @@ function update(delta: number) {
         Rscene.lineStyle(2, z * 0x010101, 0.8);
         Rscene.lineTo(rope1[i].x, rope1[i].y);
 
-        if (i > 0) {
+        if (i > 0 && false) {
             const X = -200 + 20 * i;
             const Y = -200;
             Rscene.moveTo(X, Y);
@@ -334,8 +351,25 @@ function update(delta: number) {
 
     //Rscene = res.get(.5);
     //app.stage.addChild(Rscene);
+    exampleText.text = String(t);
 
 }
+
+
+
+function update(delta: number) {
+    Rscene.clear();
+    //rope1[0].y = mousePosition[1];
+
+
+    Rscene.moveTo(0, 0);
+    unsimulatedTime += delta;
+    while (unsimulatedTime > 0) {
+        unsimulatedTime -= doSimStep();
+    }
+    render();
+}
+
 
 
 async function startGame() {
