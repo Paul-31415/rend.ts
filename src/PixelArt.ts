@@ -658,7 +658,7 @@ class CombinePhysics implements Physics {
 }
 */
 
-const g = 0.1;
+const g = 0.01;
 function Tube(circ: number, links: number, len = 1, s = 1, d = 1, sc = 1, dc = 1, sups = 0, supd = 1, ): PPoint3d[] {
     var points: PPoint3d[] = [];
     const r = len / (2 * Math.sin(Math.PI / circ));

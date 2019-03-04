@@ -1,5 +1,5 @@
 import * as PIXI from "pixi.js";
-
+import * as CTRL from "./controls";
 
 
 import 'pixi-display';
@@ -90,7 +90,7 @@ const tubeC = 6;
 const tubeL = 10;
 
 //var rope1 = Tube(tubeC, 60, tubeL, 10, 1, 1000, 1, 100);
-var rope1 = stiffRope(64, [5, 0, 0], 20, 200, 1, -1, -200);
+var rope1 = stiffRope(24, [15, 0, 0], 20, 200, 10, 0, -100);
 
 const r = rope1[0].a.plusV([1, 1, 1], 1);
 
@@ -127,8 +127,8 @@ for (var i = 1; i < rope1.length; i++) {
     //(rope1[i].p as PNeut).mass = 500 - i;
     //rope1[i].x = 0;//i % 2;
     //rope1[i].y = i;//i % 2;
-    ((rope1[i].p as GravityDecorator).p as PNeut).I = 25 / 4;
-    ((rope1[i].p as GravityDecorator).p as PNeut).mass = 1 / 4;
+    ((rope1[i].p as GravityDecorator).p as PNeut).I = 25 / 1;
+    ((rope1[i].p as GravityDecorator).p as PNeut).mass = 1 / 1;
 	/*if (i > 0) {
                 (rope1[i].p as GravityDecorator).gy = Math.sin((i / 50) + t * t * 0.01);
                 (rope1[i].p as GravityDecorator).gx = Math.cos((i / 50) + t * t * 0.01);
@@ -146,14 +146,18 @@ Rscene.addChild(exampleText);
 
 app.stage.addChild(Rscene);
 
-const dscale = 0.01;
+const speed = 20;
+
+
+
+const dscale = 0.1 * speed;
 
 var renderer = PIXI.autoDetectRenderer(800, 800);
 
 var t = -10;
 
 
-const ovc = 20;
+const ovc = 2 * speed;
 
 
 function point(rx = 0, ry = 0, rz = 0) {
@@ -181,6 +185,12 @@ function point(rx = 0, ry = 0, rz = 0) {
 const alen = 10;
 var unsimulatedTime = 0;
 
+var zflex = 0;
+var yflex = 0;
+const ctrls = new CTRL.Key4Control("KeyW",
+    "KeyA",
+    "KeyS",
+    "KeyD");
 
 
 function doSimStep(): number {
@@ -188,16 +198,24 @@ function doSimStep(): number {
     //((rope1[400].p as GravityDecorator).p as PLinkage).l += 0.001;
     const delta = 1;
     t += delta / ovc;
-    /*if (t > 125 && t < 9000) {
+    /*
+    if (t > 125 && t < 9000) {
         for (var i = 1; i < rope1.length; i++) {
-            (((rope1[i].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).angle = (((rope1[i].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).angle.plusV([0, 0, (t % 100 > 50) ? .1 : -.1], dscale * delta / ovc) as QuaternionAngle;
+            (((rope1[i].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).angle = (((rope1[i].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).angle.plusV([0, 0, (t % 100 > 50) ? .001 : -.001], dscale * delta / ovc) as QuaternionAngle;
         }
     }
     if (t > 10000) {
         for (var i = 1; i < rope1.length; i++) {
             //(((rope1[i].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).angle = (((rope1[i].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).angle.plusV([0, 0.001, 0], dscale * delta / ovc) as QuaternionAngle;
         }
-    }*/
+    }//*/
+
+
+
+    const v = ctrls.value();
+    for (var i = 1; i < rope1.length; i++) {
+        (((rope1[i].p as GravityDecorator).p as PNeut).f[0] as FStiffLinkage).angle = new QuaternionAngle().plusV([0, v[0], v[1]], 0.1) as QuaternionAngle;
+    }
 
 
 
@@ -242,7 +260,7 @@ function render(): void {
         Rscene.lineStyle(2, z * 0x010101, 0.8);
         Rscene.lineTo(rope1[i].x, rope1[i].y);
 
-        if (i > 0 && false) {
+        if (i > 0 && true) {
             const X = -200 + 20 * i;
             const Y = -200;
             Rscene.moveTo(X, Y);
