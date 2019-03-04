@@ -4,7 +4,7 @@ import * as CTRL from "./controls";
 
 import 'pixi-display';
 import { traceOrtho, exampleScene, Ray, V3D, tracePersp, ColorImage, traceRefine } from "./render";
-import { rope, PVel, PNeut, PLinkage, GravityDecorator, TriBridge, Tube, FLinkage, stiffRope, Angle, QuaternionAngle, FAngleLinkage, FStiffLinkage } from "./PixelArt";
+import { rope, PVel, PNeut, PLinkage, GravityDecorator, TriBridge, Tube, FLinkage, stiffRope, Angle, QuaternionAngle, FAngleLinkage, FStiffLinkage } from "./PointPhysics";
 import { test } from "mocha";
 //import { io } from 'socket.io-client';
 
@@ -90,7 +90,7 @@ const tubeC = 6;
 const tubeL = 10;
 
 //var rope1 = Tube(tubeC, 60, tubeL, 10, 1, 1000, 1, 100);
-var rope1 = stiffRope(24, [15, 0, 0], 20, 200, 10, 0, -100);
+var rope1 = stiffRope(24, [15, 0, 0], 20, 200, 10, 0, -50);
 
 const r = rope1[0].a.plusV([1, 1, 1], 1);
 
